@@ -2,7 +2,6 @@ import torch
 import torch.nn as nn
 
 
-
 class SelfAttention(nn.Module):
     def __init__(self, embed_size, heads):
         super(SelfAttention, self).__init__()
@@ -45,6 +44,8 @@ class SelfAttention(nn.Module):
 
         # Softmax
         attention = torch.softmax(energy / (self.embed_size ** (1 / 2)), dim=3)
+
+        # Matmul Att, V
         out = torch.einsum("nhql, nlhd -> nqhd", [attention, values]).reshape(
             N, query_len, self.heads * self.head_dim
         )
@@ -74,8 +75,11 @@ class TransformerBlock(nn.Module):
 
     def forward(self, value, key, query, mask):
         attention = self.attention(value, key, query, mask)
+
         x = self.dropout(self.norm1(attention, query))  # skip connection
+
         forward = self.feed_forward(x)
+
         out = self.norm2(forward + x)  # skip connection
         return out
 
@@ -85,6 +89,7 @@ class Encoder(nn.Module):
         super(Encoder, self).__init__()
         self.embed_size = embed_size
         self.device = device
+
         self.word_embedding = nn.Embedding(src_vocab_size, embed_size)
         self.positional_embedding = nn.Embedding(max_length, embed_size)
 
@@ -102,6 +107,7 @@ class Encoder(nn.Module):
 
     def forward(self, x, mask):
         N, seq_length = x.shape
+
         positions = torch.arange(0, seq_length).expand(N, seq_length).to(self.device)
 
         out = self.dropout(self.word_embedding(x) + self.positional_embedding(positions))
@@ -117,6 +123,7 @@ class DecoderBlock(nn.Module):
     def __init__(self, embed_size, heads, forward_expansion, dropout, device):
         super(DecoderBlock, self).__init__()
         self.attention = SelfAttention(embed_size, heads)
+
         self.norm = nn.LayerNorm(embed_size)
 
         self.transformer_block = TransformerBlock(embed_size, heads, dropout, forward_expansion)
@@ -135,6 +142,7 @@ class Decoder(nn.Module):
                  max_length):
         super(Decoder, self).__init__()
         self.device = device
+
         self.word_embedding = nn.Embedding(target_vocab_size, embed_size)
         self.position_embedding = nn.Embedding(max_length, embed_size)
 
@@ -144,10 +152,12 @@ class Decoder(nn.Module):
         )
 
         self.fc_out = nn.Linear(embed_size, target_vocab_size)
+
         self.dropout = nn.Dropout(dropout)
 
     def forward(self, x, enc_out, src_mask, target_mask):
         N, seq_length = x.shape
+
         positions = torch.arange(0, seq_length).expand(N, seq_length).to(self.device)
         x = self.dropout(self.word_embedding(x) + self.position_embedding(positions))
 
